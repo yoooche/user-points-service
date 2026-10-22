@@ -1,14 +1,6 @@
-
-# 📬 User Points Service – Backend Homework
-
-This is a technical assignment for backend engineer candidates. You are expected to build a RESTful user points  service using **Spring Boot**, integrating **MySQL**, **Redis**, and **RocketMQ**.
-
-
----
-
 ## 🎯 Objective
 
-Implement a `User Points Service` that allows adding and tracking user reward points.
+An `User Points Service` that allows adding and tracking user reward points.
 The system should support:
 - Adding points to a user
 - Querying current user points
@@ -33,6 +25,16 @@ You may use starter dependencies such as:
 - Spring Data JPA
 - Spring Cache
 - RocketMQ Spring Boot Starter
+
+---
+
+## 📈 Scale assumptions
+
+- ~70M monthly web visits
+- Mobile app traffic included: assume 2–4× web → ~10M DAU
+- Design target: 100M registered users, 10M DAU
+- Peak: weekend evenings (European football, Nigeria UTC+1), 10× average
+  → ~6K write QPS / ~25K read QPS
 
 ---
 
