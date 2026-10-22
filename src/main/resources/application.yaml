@@ -1,9 +1,33 @@
 spring:
   application:
-    name: demo
+    name: user-points-service
 
-# define mysql properties here
+  datasource:
+    url: jdbc:mysql://localhost:3306/taskdb?serverTimezone=UTC&characterEncoding=utf8
+    username: taskuser
+    password: taskpass
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      idle-timeout: 30000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  transaction:
+    default-timeout: 5
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
 
-# define redis properties here
+server:
+  shutdown: graceful
 
-# define rocketmq properties here
+logging:
+  pattern:
+    correlation: "%replace([%X{requestId}] ){'^\\[\\] $', ''}"
