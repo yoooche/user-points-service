@@ -6,7 +6,7 @@ import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.dto.UpdateReasonRequest;
 import com.yoooche.points.dto.UserPointsResponse;
 import com.yoooche.points.exception.ErrorResponse;
-import com.yoooche.points.service.PointsService;
+import com.yoooche.points.service.UserPointsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,9 +26,9 @@ import java.util.List;
 @RestController
 @RequestMapping(value = "/points", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
-public class PointsController {
+public class UserPointsController {
 
-    private final PointsService pointsService;
+    private final UserPointsService userPointsService;
 
     @Operation(summary = "Add points to a user",
             description = "Stores a point record and adds the amount to the user's total")
@@ -38,7 +38,7 @@ public class PointsController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public PointRecordResponse addPoints(@Valid @RequestBody AddPointsRequest request) {
-        return pointsService.addPoints(request);
+        return userPointsService.addPoints(request);
     }
 
     @Operation(
@@ -48,7 +48,7 @@ public class PointsController {
     @ApiResponse(responseCode = "200", description = "Up to 10 entries; empty when no user has points")
     @GetMapping("/leaderboard")
     public List<UserPointsResponse> getLeaderboard() {
-        return pointsService.getLeaderboard();
+        return userPointsService.getLeaderboard();
     }
 
     @Operation(summary = "Get a user's total points")
@@ -59,7 +59,7 @@ public class PointsController {
     public UserPointsResponse getTotalUserPoints(
             @Parameter(description = "User id. `leaderboard` is reserved by the leaderboard endpoint.", example = "user_123")
             @PathVariable @Pattern(regexp = Validation.USER_ID_PATTERN, message = Validation.USER_ID_MESSAGE) String userId) {
-        return pointsService.getTotalUserPoints(userId);
+        return userPointsService.getTotalUserPoints(userId);
     }
 
     @Operation(summary = "Update the reason of a point record",
@@ -72,7 +72,7 @@ public class PointsController {
             @Parameter(description = "Point record id returned by `POST /points`. This is not a user id.", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateReasonRequest request) {
-        return pointsService.updateReason(id, request.reason());
+        return userPointsService.updateReason(id, request.reason());
     }
 
     @Operation(summary = "Delete all points of a user",
@@ -86,6 +86,6 @@ public class PointsController {
     public void deleteUserPoints(
             @Parameter(description = "User id", example = "user_123")
             @PathVariable @Pattern(regexp = Validation.USER_ID_PATTERN, message = Validation.USER_ID_MESSAGE) String userId) {
-        pointsService.deleteUserPoints(userId);
+        userPointsService.deleteUserPoints(userId);
     }
 }

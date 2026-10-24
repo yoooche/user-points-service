@@ -8,7 +8,7 @@ import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import com.yoooche.points.repository.UserPointsRepository;
-import com.yoooche.points.service.PointsService;
+import com.yoooche.points.service.UserPointsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessException;
@@ -20,7 +20,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class PointsServiceImpl implements PointsService {
+public class UserPointsServiceImpl implements UserPointsService {
 
     private static final int MYSQL_ER_DATA_OUT_OF_RANGE = 1690;
 

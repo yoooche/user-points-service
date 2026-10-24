@@ -3,7 +3,7 @@ package com.yoooche.points.controller;
 import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.constant.StatusCode;
-import com.yoooche.points.service.PointsService;
+import com.yoooche.points.service.UserPointsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -24,14 +24,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(PointsController.class)
-class PointsControllerTest {
+@WebMvcTest(UserPointsController.class)
+class UserPointsControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private PointsService service;
+    private UserPointsService service;
 
     @Test
     void addPointsReturns201() throws Exception {

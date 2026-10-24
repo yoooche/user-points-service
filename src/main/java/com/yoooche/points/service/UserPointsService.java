@@ -6,7 +6,7 @@ import com.yoooche.points.dto.UserPointsResponse;
 
 import java.util.List;
 
-public interface PointsService {
+public interface UserPointsService {
 
     PointRecordResponse addPoints(AddPointsRequest request);
 

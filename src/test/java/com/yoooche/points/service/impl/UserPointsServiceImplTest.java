@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class PointsServiceImplTest {
+class UserPointsServiceImplTest {
 
     @Mock
     private UserPointsRecordRepository recordRepository;
@@ -28,7 +28,7 @@ class PointsServiceImplTest {
     private UserPointsRepository pointsRepository;
 
     @InjectMocks
-    private PointsServiceImpl service;
+    private UserPointsServiceImpl service;
 
     @Test
     void getTotalUserPointsThrowsWhenUserHasNoPoints() {

@@ -1,7 +1,7 @@
 package com.yoooche.points.filter;
 
-import com.yoooche.points.controller.PointsController;
-import com.yoooche.points.service.PointsService;
+import com.yoooche.points.controller.UserPointsController;
+import com.yoooche.points.service.UserPointsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -14,14 +14,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
-@WebMvcTest(PointsController.class)
+@WebMvcTest(UserPointsController.class)
 class RequestIdFilterTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private PointsService service;
+    private UserPointsService service;
 
     @Test
     void generatesIdWhenClientSendsNone() throws Exception {

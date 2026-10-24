@@ -1,7 +1,7 @@
 package com.yoooche.points.filter;
 
-import com.yoooche.points.controller.PointsController;
-import com.yoooche.points.service.PointsService;
+import com.yoooche.points.controller.UserPointsController;
+import com.yoooche.points.service.UserPointsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
-@WebMvcTest(PointsController.class)
+@WebMvcTest(UserPointsController.class)
 @ExtendWith(OutputCaptureExtension.class)
 class AccessLogFilterTest {
 
@@ -24,7 +24,7 @@ class AccessLogFilterTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private PointsService service;
+    private UserPointsService service;
 
     @Test
     void logsMethodPathStatusAndRequestId(CapturedOutput output) throws Exception {

@@ -24,10 +24,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
-class PointsServiceIntegrationTest {
+class UserPointsServiceIntegrationTest {
 
     @Autowired
-    private PointsService service;
+    private UserPointsService service;
 
     @Autowired
     private UserPointsRecordRepository recordRepository;
