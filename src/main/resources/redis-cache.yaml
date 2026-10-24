@@ -1,0 +1,14 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      connect-timeout: 1s
+      timeout: 500ms
+      repositories:
+        enabled: false
+
+redis:
+  caches:
+    - cache-name: user-points-total
+      ttl: 10m

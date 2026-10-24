@@ -1,8 +1,7 @@
 package com.yoooche.points;
 
 import com.yoooche.points.repository.UserPointsRecordRepository;
-import com.yoooche.points.repository.UserPointsRepository;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, TestDataCleaner.class})
 @ExtendWith(OutputCaptureExtension.class)
 class PointsApiIntegrationTest {
 
@@ -39,12 +38,11 @@ class PointsApiIntegrationTest {
     private UserPointsRecordRepository recordRepository;
 
     @Autowired
-    private UserPointsRepository pointsRepository;
+    private TestDataCleaner testDataCleaner;
 
-    @AfterEach
-    void cleanUp() {
-        recordRepository.deleteAll();
-        pointsRepository.deleteAll();
+    @BeforeEach
+    void resetData() {
+        testDataCleaner.reset();
     }
 
     @Test

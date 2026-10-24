@@ -1,15 +1,18 @@
 package com.yoooche.points.service.impl;
 
+import com.yoooche.points.cache.UserPointsCache;
 import com.yoooche.points.constant.StatusCode;
 import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.dto.UserPointsResponse;
+import com.yoooche.points.event.PointsAddedEvent;
+import com.yoooche.points.event.PointsDeletedEvent;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
-import com.yoooche.points.repository.UserPointsRepository;
 import com.yoooche.points.service.UserPointsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -25,7 +28,8 @@ public class UserPointsServiceImpl implements UserPointsService {
     private static final int MYSQL_ER_DATA_OUT_OF_RANGE = 1690;
 
     private final UserPointsRecordRepository recordRepository;
-    private final UserPointsRepository pointsRepository;
+    private final UserPointsCache userPointsCache;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     @Override
@@ -36,8 +40,9 @@ public class UserPointsServiceImpl implements UserPointsService {
         record.setReason(request.reason());
         var saved = recordRepository.save(record);
 
+        long total;
         try {
-            pointsRepository.addToTotal(request.userId(), request.amount());
+            total = userPointsCache.addToTotal(request.userId(), request.amount());
         } catch (DataAccessException ex) {
             if (isTotalOverflow(ex)) {
                 throw new BaseException(StatusCode.TOTAL_LIMIT_EXCEEDED,
@@ -45,23 +50,19 @@ public class UserPointsServiceImpl implements UserPointsService {
             }
             throw ex;
         }
+        eventPublisher.publishEvent(new PointsAddedEvent(request.userId(), request.amount(), total));
         return PointRecordResponse.from(saved);
     }
 
-    @Transactional(readOnly = true)
     @Override
     public UserPointsResponse getTotalUserPoints(String userId) {
-        return pointsRepository.findById(userId)
-                .map(UserPointsResponse::from)
+        return userPointsCache.getTotal(userId)
                 .orElseThrow(() -> new BaseException(StatusCode.USER_NOT_FOUND, "User not found: " + userId));
     }
 
-    @Transactional(readOnly = true)
     @Override
     public List<UserPointsResponse> getLeaderboard() {
-        return pointsRepository.findTop10ByOrderByTotalDescUserIdAsc().stream()
-                .map(UserPointsResponse::from)
-                .toList();
+        return userPointsCache.getLeaderboard();
     }
 
     @Transactional
@@ -77,10 +78,11 @@ public class UserPointsServiceImpl implements UserPointsService {
     @Override
     public void deleteUserPoints(String userId) {
         int records = recordRepository.deleteAllByUserId(userId);
-        int totals = pointsRepository.deleteAllByUserId(userId);
+        int totals = userPointsCache.deleteTotal(userId);
         if (records == 0 && totals == 0) {
             throw new BaseException(StatusCode.USER_NOT_FOUND, "User not found: " + userId);
         }
+        eventPublisher.publishEvent(new PointsDeletedEvent(userId));
     }
 
     private static boolean isTotalOverflow(DataAccessException ex) {

@@ -1,0 +1,4 @@
+caffeine:
+  caches:
+    - cache-name: user-points-leaderboard
+      spec: expireAfterWrite=1s

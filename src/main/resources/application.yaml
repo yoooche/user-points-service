@@ -1,6 +1,8 @@
 spring:
   application:
     name: user-points-service
+  config:
+    import: redis-cache.yaml, caffeine-cache.yaml
 
   datasource:
     url: jdbc:mysql://localhost:3306/taskdb?serverTimezone=UTC&characterEncoding=utf8
@@ -27,6 +29,8 @@ spring:
 
 server:
   shutdown: graceful
+  servlet:
+    context-path: /user-points-service
 
 logging:
   pattern:

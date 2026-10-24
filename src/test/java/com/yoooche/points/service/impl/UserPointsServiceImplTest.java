@@ -1,11 +1,11 @@
 package com.yoooche.points.service.impl;
 
+import com.yoooche.points.cache.UserPointsCache;
 import com.yoooche.points.constant.StatusCode;
 import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
-import com.yoooche.points.repository.UserPointsRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,14 +25,14 @@ class UserPointsServiceImplTest {
     private UserPointsRecordRepository recordRepository;
 
     @Mock
-    private UserPointsRepository pointsRepository;
+    private UserPointsCache userPointsCache;
 
     @InjectMocks
     private UserPointsServiceImpl service;
 
     @Test
     void getTotalUserPointsThrowsWhenUserHasNoPoints() {
-        when(pointsRepository.findById("ghost")).thenReturn(Optional.empty());
+        when(userPointsCache.getTotal("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getTotalUserPoints("ghost"))
                 .isInstanceOf(BaseException.class)
@@ -65,7 +65,7 @@ class UserPointsServiceImplTest {
     @Test
     void deleteThrowsWhenUserHasNothingToDelete() {
         when(recordRepository.deleteAllByUserId("ghost")).thenReturn(0);
-        when(pointsRepository.deleteAllByUserId("ghost")).thenReturn(0);
+        when(userPointsCache.deleteTotal("ghost")).thenReturn(0);
 
         assertThatThrownBy(() -> service.deleteUserPoints("ghost"))
                 .isInstanceOf(BaseException.class)

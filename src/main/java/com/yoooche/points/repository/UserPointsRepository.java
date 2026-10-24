@@ -1,6 +1,7 @@
 package com.yoooche.points.repository;
 
 import com.yoooche.points.model.UserPoints;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,9 +19,14 @@ public interface UserPointsRepository extends JpaRepository<UserPoints, String> 
             """, nativeQuery = true)
     void addToTotal(@Param("userId") String userId, @Param("amount") long amount);
 
+    @Query("SELECT p.total FROM UserPoints p WHERE p.userId = :userId")
+    long findTotalByUserId(@Param("userId") String userId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM UserPoints p WHERE p.userId = :userId")
     int deleteAllByUserId(@Param("userId") String userId);
 
     List<UserPoints> findTop10ByOrderByTotalDescUserIdAsc();
+
+    List<UserPoints> findByOrderByTotalDescUserIdAsc(Limit limit);
 }

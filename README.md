@@ -38,6 +38,38 @@ You may use starter dependencies such as:
 
 ---
 
+## 🧠 Design decisions
+
+### Leaderboard tie-break
+
+The spec ranks users by total points but does not say how to order equal totals. This service orders them by
+`userId` ascending, so the result is deterministic and identical in Redis and in the MySQL fallback.
+
+- The sorted set stores `score = -total` and is read with `ZRANGE 0 9`: the highest total comes first, and equal
+  scores fall back to member order, which is `userId` ascending. `ZREVRANGE` on positive scores would order ties by
+  `userId` descending.
+- Because the stored order matches the displayed order, `ZRANK` would give a user's rank directly if a
+  "my rank" endpoint were added.
+- Redis compares members byte by byte, and `user_id` uses the `utf8mb4_0900_bin` collation, which does the same.
+  Together with the ASCII-only `userId` pattern, both stores agree on tie order.
+
+"First to reach the total ranks first" would be a better product rule. It needs a composite score that packs the
+total and the time into one number. A Redis score is a double, which is exact only up to 2^53, so the two parts must
+share 53 bits:
+
+| Time part | Bits | Total part left |
+| --- | --- | --- |
+| seconds over 10 years (all-time) | 29 | 24 bits ≈ 16.7M, which 17 maximum adds already exceed |
+| seconds over one season (≤ 388 days) | 25 | 28 bits ≈ 268M |
+| milliseconds over one season | 35 | 18 bits ≈ 262K |
+
+The composite score therefore only works for a leaderboard bounded in time, such as a season or an event. The spec's
+`total` is the all-time total returned by `GET /points/{userId}`, so this service keeps the `userId` tie-break. For a
+seasonal leaderboard it would switch to `score = total × 2^25 + (seasonEnd − reachedAt)`, read with `ZREVRANGE`, and
+cap the season total at 2^28 − 1 with `TOTAL_LIMIT_EXCEEDED` (422) so scores never lose precision.
+
+---
+
 ## 🔧 Features to Implement
 
 ### 1️⃣ Add User Points

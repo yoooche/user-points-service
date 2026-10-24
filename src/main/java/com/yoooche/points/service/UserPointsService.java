@@ -8,6 +8,9 @@ import java.util.List;
 
 public interface UserPointsService {
 
+    /**
+     * @throws com.yoooche.points.exception.BaseException {@code TOTAL_LIMIT_EXCEEDED} if the total would overflow
+     */
     PointRecordResponse addPoints(AddPointsRequest request);
 
     /** @throws com.yoooche.points.exception.BaseException {@code USER_NOT_FOUND} if the user has no points */

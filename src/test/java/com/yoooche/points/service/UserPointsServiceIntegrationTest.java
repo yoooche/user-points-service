@@ -1,5 +1,6 @@
 package com.yoooche.points.service;
 
+import com.yoooche.points.TestDataCleaner;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.constant.StatusCode;
 import com.yoooche.points.dto.AddPointsRequest;
@@ -7,7 +8,7 @@ import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import com.yoooche.points.repository.UserPointsRepository;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, TestDataCleaner.class})
 class UserPointsServiceIntegrationTest {
 
     @Autowired
@@ -35,10 +36,12 @@ class UserPointsServiceIntegrationTest {
     @Autowired
     private UserPointsRepository pointsRepository;
 
-    @AfterEach
-    void cleanUp() {
-        recordRepository.deleteAll();
-        pointsRepository.deleteAll();
+    @Autowired
+    private TestDataCleaner testDataCleaner;
+
+    @BeforeEach
+    void resetData() {
+        testDataCleaner.reset();
     }
 
     /** Proves the atomic upsert: a read-modify-write in Java would lose some of these updates. */
