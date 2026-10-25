@@ -1,0 +1,8 @@
+target/
+.git/
+.idea/
+.archify/
+.claude/
+.mvn/
+*.md
+.DS_Store

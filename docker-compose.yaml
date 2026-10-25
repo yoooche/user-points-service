@@ -16,7 +16,8 @@ services:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # Over TCP: the socket also answers the temporary server that runs init.sql, before the tables exist.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-utaskuser", "-ptaskpass"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,9 +30,16 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   rocketmq-namesrv:
     image: apache/rocketmq:5.1.4
+    # The RocketMQ images are amd64 only; Apple Silicon runs them through Rosetta (see HELP.md).
+    platform: linux/amd64
     container_name: rocketmq-namesrv
     ports:
       - "9876:9876"
@@ -39,13 +47,15 @@ services:
       JAVA_OPT_EXT: "-Xms256m -Xmx256m -Xmn128m"
     command: sh mqnamesrv
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9876"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
+      # The name server speaks RocketMQ's own protocol, not HTTP, so only the port is checked.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9876'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   rocketmq-broker:
     image: apache/rocketmq:5.1.4
+    platform: linux/amd64
     container_name: rocketmq-broker
     depends_on:
       - rocketmq-namesrv
@@ -54,19 +64,28 @@ services:
       - "10909:10909"
     environment:
       NAMESRV_ADDR: rocketmq-namesrv:9876
-      JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn256m"
+      # runbroker.sh sizes direct memory from the whole VM, which got the broker OOM-killed next to the other services.
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn256m -XX:MaxDirectMemorySize=256m"
     volumes:
       - ./broker.conf:/home/rocketmq/rocketmq-5.1.4/conf/broker.conf
     command: sh mqbroker -c /home/rocketmq/rocketmq-5.1.4/conf/broker.conf
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
 
   rocketmq-console:
     image: styletang/rocketmq-console-ng:1.0.0
+    platform: linux/amd64
     container_name: rocketmq-console
     restart: always
     ports:
       - "8088:8080"
     environment:
-      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876 -Dcom.rocketmq.sendMessageWithVIPChannel=false"
+      # Without -Xmx the console sizes its heap from the whole VM and took about 2.5 GB.
+      JAVA_OPTS: "-Xms128m -Xmx256m -Drocketmq.namesrv.addr=rocketmq-namesrv:9876 -Dcom.rocketmq.sendMessageWithVIPChannel=false"
     depends_on:
       - rocketmq-namesrv
 
