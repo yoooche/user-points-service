@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      # Integration tests start MySQL and Redis with Testcontainers on the runner's Docker.
+      - name: Test
+        run: ./mvnw -B test
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          csv=target/site/jacoco/jacoco.csv
+          [ -f "$csv" ] || exit 0
+          awk -F, 'NR > 1 { im += $4; ic += $5; bm += $6; bc += $7; lm += $8; lc += $9 }
+            END {
+              print "| Counter | Covered |"
+              print "| --- | --- |"
+              printf "| Lines | %.1f%% (%d/%d) |\n", 100 * lc / (lc + lm), lc, lc + lm
+              printf "| Branches | %.1f%% (%d/%d) |\n", 100 * bc / (bc + bm), bc, bc + bm
+              printf "| Instructions | %.1f%% (%d/%d) |\n", 100 * ic / (ic + im), ic, ic + im
+            }' "$csv" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/

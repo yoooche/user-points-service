@@ -24,6 +24,9 @@ spring:
   task:
     execution:
       mode: force
+  threads:
+    virtual:
+      enabled: true
   jackson:
     deserialization:
       accept-float-as-int: false

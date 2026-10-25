@@ -59,6 +59,15 @@ docker-compose -f docker-compose.yaml -f docker-compose.app.yaml up -d --build
 docker-compose down -v && docker-compose up -d
 ```
 
+## Sample data
+
+`scripts/seed.sh` adds points to 17 users through the API and prints the leaderboard. Pass the base URL for mode B:
+
+```bash
+scripts/seed.sh                                            # mode A
+scripts/seed.sh http://localhost:8081/user-points-service  # mode B
+```
+
 ## Try it
 
 Set the base URL for the mode in use:
