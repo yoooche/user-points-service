@@ -10,6 +10,7 @@ import com.yoooche.points.event.PointsDeletedEvent;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
+import com.yoooche.points.repository.UserPointsRepository;
 import com.yoooche.points.service.UserPointsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,6 +29,7 @@ public class UserPointsServiceImpl implements UserPointsService {
     private static final int MYSQL_ER_DATA_OUT_OF_RANGE = 1690;
 
     private final UserPointsRecordRepository recordRepository;
+    private final UserPointsRepository pointsRepository;
     private final UserPointsCache userPointsCache;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -40,9 +42,8 @@ public class UserPointsServiceImpl implements UserPointsService {
         record.setReason(request.reason());
         var saved = recordRepository.save(record);
 
-        long total;
         try {
-            total = userPointsCache.addToTotal(request.userId(), request.amount());
+            pointsRepository.addToTotal(request.userId(), request.amount());
         } catch (DataAccessException ex) {
             if (isTotalOverflow(ex)) {
                 throw new BaseException(StatusCode.TOTAL_LIMIT_EXCEEDED,
@@ -50,6 +51,7 @@ public class UserPointsServiceImpl implements UserPointsService {
             }
             throw ex;
         }
+        long total = pointsRepository.findTotalByUserId(request.userId());
         eventPublisher.publishEvent(new PointsAddedEvent(request.userId(), request.amount(), total));
         return PointRecordResponse.from(saved);
     }
@@ -78,7 +80,7 @@ public class UserPointsServiceImpl implements UserPointsService {
     @Override
     public void deleteUserPoints(String userId) {
         int records = recordRepository.deleteAllByUserId(userId);
-        int totals = userPointsCache.deleteTotal(userId);
+        int totals = pointsRepository.deleteAllByUserId(userId);
         if (records == 0 && totals == 0) {
             throw new BaseException(StatusCode.USER_NOT_FOUND, "User not found: " + userId);
         }

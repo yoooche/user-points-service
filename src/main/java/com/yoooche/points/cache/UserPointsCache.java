@@ -24,10 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * The leaderboard is a sorted set with score = -total: ZRANGE then returns the highest total first and breaks ties
- * by userId ascending, matching the MySQL ordering. ZREVRANGE would break ties by userId descending.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,9 +31,6 @@ import java.util.stream.Collectors;
 public class UserPointsCache {
 
     private static final int TOP_N = 10;
-
-    /** Buffer below the top 10 so deletions cannot leave it short. Totals only grow, so a trimmed user
-     *  re-enters with the full total on their next add. */
     private static final int LEADERBOARD_CAPACITY = 1000;
 
     private final UserPointsRepository pointsRepository;
@@ -48,22 +41,16 @@ public class UserPointsCache {
         return pointsRepository.findById(userId).map(UserPointsResponse::from);
     }
 
-    public long addToTotal(String userId, long amount) {
-        pointsRepository.addToTotal(userId, amount);
-        return pointsRepository.findTotalByUserId(userId);
-    }
-
-    public int deleteTotal(String userId) {
-        return pointsRepository.deleteAllByUserId(userId);
-    }
-
-    /** After commit: evicting earlier would let a concurrent reader re-cache the pre-commit total. */
     @TransactionalEventListener
     @CacheEvict(key = "#event.userId")
     public void evictTotal(PointsEvent event) {
         log.debug("Evicted cached total of {}", event.userId());
     }
 
+    /**
+     * The leaderboard is a sorted set with score = -total: ZRANGE then returns the highest total first and breaks ties
+     * by userId ascending, matching the MySQL ordering. ZREVRANGE would break ties by userId descending.
+     */
     @Cacheable(cacheManager = "caffeineCacheManager", cacheNames = CacheNames.USER_POINTS_LEADERBOARD, sync = true)
     public List<UserPointsResponse> getLeaderboard() {
         try {
@@ -115,7 +102,6 @@ public class UserPointsCache {
                 .collect(Collectors.toMap(UserPoints::getUserId, points -> score(points.getTotal()))));
     }
 
-    /** ZADD LT keeps the higher total, so a late or replayed event never lowers it. */
     private void writeLeaderboard(Map<String, Double> scores) {
         redisCacheHelper.zAddIfLower(CacheNames.USER_POINTS_LEADERBOARD, scores);
         redisCacheHelper.zKeepFirst(CacheNames.USER_POINTS_LEADERBOARD, LEADERBOARD_CAPACITY);
