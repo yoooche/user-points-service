@@ -1,0 +1,9 @@
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: user-points-producer
+    send-message-timeout: 3000
+
+outbox:
+  relay:
+    batch-size: 200

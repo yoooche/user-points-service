@@ -2,7 +2,7 @@ spring:
   application:
     name: user-points-service
   config:
-    import: redis-cache.yaml, caffeine-cache.yaml
+    import: redis-cache.yaml, caffeine-cache.yaml, rocketmq.yaml
 
   datasource:
     url: jdbc:mysql://localhost:3306/taskdb?serverTimezone=UTC&characterEncoding=utf8
@@ -21,6 +21,9 @@ spring:
     default-timeout: 5
   lifecycle:
     timeout-per-shutdown-phase: 15s
+  task:
+    execution:
+      mode: force
   jackson:
     deserialization:
       accept-float-as-int: false

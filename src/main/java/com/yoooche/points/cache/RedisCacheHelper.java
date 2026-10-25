@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Keys are prefixed with the application name, like the Spring Cache entries. */
 @Component
 @RequiredArgsConstructor
 public class RedisCacheHelper {
@@ -25,7 +24,6 @@ public class RedisCacheHelper {
     @Value("${spring.application.name}")
     private String system;
 
-    /** New members are always added; existing ones only move to a lower score. */
     public void zAddIfLower(String key, Map<String, Double> scores) {
         if (scores.isEmpty()) {
             return;

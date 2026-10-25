@@ -1,7 +1,6 @@
 package com.yoooche.points.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,7 +8,6 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties(CaffeineCacheProperties.class)
 public class CaffeineConfig {
 
     @Bean("caffeineCacheManager")

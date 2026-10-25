@@ -31,7 +31,8 @@ public class UserPointsController {
     private final UserPointsService userPointsService;
 
     @Operation(summary = "Add points to a user",
-            description = "Stores a point record and adds the amount to the user's total")
+            description = "Stores a point record, adds the amount to the user's total "
+                    + "and publishes an `ADDED` event to `user-points-topic`.")
     @ApiResponse(responseCode = "201", description = "Record created")
     @ApiResponse(responseCode = "400", description = "Invalid request body; `errors` lists each invalid field",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -76,7 +77,7 @@ public class UserPointsController {
     }
 
     @Operation(summary = "Delete all points of a user",
-            description = "Removes every point record and the total of the user.")
+            description = "Removes every point record and the total of the user. No event is published.")
     @ApiResponse(responseCode = "204", description = "Deleted")
     @ApiResponse(responseCode = "404",
             description = "Nothing to delete (`user_not_found`). When retrying a DELETE, treat this as success.",

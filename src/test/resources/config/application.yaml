@@ -1,0 +1,4 @@
+# Boot layers this file over the main application.yaml. Tests call the relay directly instead of racing it.
+outbox:
+  relay:
+    enabled: false

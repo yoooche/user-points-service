@@ -68,6 +68,92 @@ The composite score therefore only works for a leaderboard bounded in time, such
 seasonal leaderboard it would switch to `score = total × 2^25 + (seasonEnd − reachedAt)`, read with `ZREVRANGE`, and
 cap the season total at 2^28 − 1 with `TOTAL_LIMIT_EXCEEDED` (422) so scores never lose precision.
 
+### Event delivery: transactional outbox
+
+A points change and its event must not disagree: an event for a rolled-back change, or a committed change with no
+event. Sending to RocketMQ cannot join the MySQL transaction, so the event is written to `outbox_message` in the same
+transaction, and `OutboxRelay` publishes it right after the commit.
+
+| Option | Crash after commit | Broker down | Cost |
+| --- | --- | --- | --- |
+| Send after commit | event lost | `POST` still succeeds | lowest |
+| **Transactional outbox** (chosen) | relay sends it after restart | `POST` still succeeds; rows wait in the outbox | one table and a relay |
+| RocketMQ transactional message | broker checks back | `POST` fails, because the half message is sent first | service coupled to the broker |
+
+- Only adding points publishes an event, as the spec asks. Deleting a user publishes nothing.
+- The outbox is shared, not per message type. Each row carries its own `topic`, `tag` and `message_key`, so
+  `OutboxWriter`, `OutboxRelay` and `RocketMqSender` know nothing about points; `PointsEventOutboxListener` is the only
+  class that maps a points event to a message.
+- A commit that wrote to the outbox wakes the relay (`OutboxRelayTrigger`), so a message usually leaves within
+  milliseconds. Every pass runs on one dedicated thread (`ThreadConfig`), and wake-ups that arrive while a pass is
+  queued merge into it. A sweep every 30 seconds and one pass at startup pick up rows that a crash or a failed send
+  left behind.
+- Delivery is at least once: if a send succeeds but deleting the row fails, the event is sent again. A send that the
+  broker stored but reported as `FLUSH_DISK_TIMEOUT` or `SLAVE_NOT_AVAILABLE` is also sent again; a broker that flushes
+  asynchronously and has no synchronous replica, as `broker.conf` sets up, never reports these. Each message carries
+  an `eventId` for consumers to deduplicate.
+- **No ordering guarantee.** `ADDED` events commute: a consumer that sums amounts or keeps a count gets the same result
+  in any order. Paying for per-key ordering would buy consumers nothing, so the relay does not:
+  - Each page of up to 200 rows goes to the broker as one batch (one round trip), grouped by topic and tag and split
+    at 1 MB.
+  - A failed batch stays in the outbox and is retried later; the batches after it in the same pass are still sent.
+  - After 3 failed batches in a row the pass stops, because each one can wait for the 3-second send timeout. During
+    an outage a pass therefore ends within about 10 seconds instead of holding up shutdown.
+  - Measured locally by seeding 20,000 rows and timing how long one relay on Docker took to empty the outbox: about
+    15,000 messages per second, against about 1,400 when every message was sent on its own in order. This is a drain
+    rate, not a load test. The peak in the scale assumptions is about 6,000 writes per second.
+- Dead letters: only a message that RocketMQ refuses for what it is (`MESSAGE_ILLEGAL`, such as a body over the size
+  limit) moves to `outbox_dead_letter`, with the error. Sending it again would fail the same way. Every other failure,
+  such as the broker being down, a missing topic or a timeout, stays in the outbox and is retried forever, so an
+  outage never dead-letters healthy messages; so does a topic name the client rejects, such as `a.b`, because that
+  comes back as a different code. One refused message rejects its whole batch, so the relay then sends that batch one
+  message at a time and dead-letters only the refused one, stopping at the first failure of any other kind.
+- Replaying a dead letter after fixing the cause:
+
+  ```sql
+  START TRANSACTION;
+  INSERT INTO outbox_message (event_id, topic, tag, message_key, request_id, payload, created_at)
+  SELECT event_id, topic, tag, message_key, request_id, payload, created_at FROM outbox_dead_letter WHERE id = ?;
+  DELETE FROM outbox_dead_letter WHERE id = ?;
+  COMMIT;
+  ```
+
+  A row inserted by hand does not wake the relay, so it leaves with the next 30-second sweep.
+
+  The dead-letter table has its own id and does not make `event_id` unique, so a replayed message that is refused
+  again gets a new row instead of blocking the move.
+- Published rows are deleted, so the table only holds what is still pending.
+- If events that do not commute are added, such as deductions or deletions, they need per-key ordering again: route
+  by `userId` with `syncSendOrderly`, send in order and stop on failure, and partition the relay by `hash(userId)` to
+  keep the throughput.
+- Known limits:
+  - Run one relay instance; several would send the same rows twice. `outbox.relay.enabled=false` turns it off on the
+    other instances, and ShedLock or `SELECT ... FOR UPDATE SKIP LOCKED` would let them share the work.
+  - A topic that never gets created keeps its messages in the outbox forever. The relay logs a warning on every pass,
+    which is what an alert should watch.
+  - Every pass starts from the oldest row and stops after 3 failed batches in a row. If 3 batches' worth of rows for
+    such a topic pile up at the head of the outbox, the rows after them are not reached until those are fixed or
+    removed. With one topic today this cannot happen; skipping a failing destination for the rest of the pass would
+    fix it once the outbox carries several.
+
+Message on `user-points-topic`, tag `ADDED`, keys `userId` and the request id:
+
+```json
+{
+  "eventId": "52121adb-b686-4470-a950-687907026ecb",
+  "userId": "user_123",
+  "amount": 100,
+  "total": 1100,
+  "requestId": "e2e-1",
+  "occurredAt": "2026-10-24T09:02:24.936Z"
+}
+```
+
+Events for a user may arrive out of order or more than once. Deletions are not published, so a consumer cannot rebuild
+a user's state from this stream alone once the user has been deleted: the amounts from before the deletion still add
+up, and a user who earns points again starts over from a lower `total`. The payload is stored in a MySQL `JSON` column,
+so field order and whitespace are not guaranteed.
+
 ---
 
 ## 🔧 Features to Implement

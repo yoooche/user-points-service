@@ -1,6 +1,8 @@
 package com.yoooche.points;
 
 import com.yoooche.points.constant.CacheNames;
+import com.yoooche.points.repository.OutboxDeadLetterRepository;
+import com.yoooche.points.repository.OutboxMessageRepository;
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import com.yoooche.points.repository.UserPointsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,12 @@ public class TestDataCleaner {
     private UserPointsRepository pointsRepository;
 
     @Autowired
+    private OutboxMessageRepository outboxRepository;
+
+    @Autowired
+    private OutboxDeadLetterRepository deadLetterRepository;
+
+    @Autowired
     private StringRedisTemplate redisTemplate;
 
     @Autowired
@@ -30,6 +38,8 @@ public class TestDataCleaner {
     public void reset() {
         recordRepository.deleteAll();
         pointsRepository.deleteAll();
+        outboxRepository.deleteAll();
+        deadLetterRepository.deleteAll();
         redisTemplate.execute((RedisCallback<Void>) connection -> {
             connection.serverCommands().flushDb();
             return null;
