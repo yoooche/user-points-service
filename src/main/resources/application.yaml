@@ -40,4 +40,5 @@ server:
 
 logging:
   pattern:
-    correlation: "%replace([%X{requestId}] ){'^\\[\\] $', ''}"
+    # Class name instead of %C/%M/%L: caller data walks the stack on every log call.
+    console: "[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%X{requestId}] [%clr(%p)] [%t] [%logger{0}] - %m%n%wEx"

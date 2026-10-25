@@ -9,6 +9,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -40,5 +43,28 @@ class AccessLogFilterTest {
                         {"userId":"secret_user","amount":-1,"reason":"secret_reason"}"""));
 
         assertThat(output).contains("POST /points -> 400").doesNotContain("secret_reason");
+    }
+
+    @Test
+    void skipsSwaggerUnderTheContextPath(CapturedOutput output) throws Exception {
+        new AccessLogFilter().doFilter(requestUnderContextPath("/swagger-ui/index.html"),
+                new MockHttpServletResponse(), new MockFilterChain());
+
+        assertThat(output).doesNotContain("swagger-ui");
+    }
+
+    @Test
+    void logsApiCallsUnderTheContextPath(CapturedOutput output) throws Exception {
+        new AccessLogFilter().doFilter(requestUnderContextPath("/points/user_1"),
+                new MockHttpServletResponse(), new MockFilterChain());
+
+        assertThat(output).contains("GET /user-points-service/points/user_1 -> 200");
+    }
+
+    private static MockHttpServletRequest requestUnderContextPath(String servletPath) {
+        var request = new MockHttpServletRequest("GET", "/user-points-service" + servletPath);
+        request.setContextPath("/user-points-service");
+        request.setServletPath(servletPath);
+        return request;
     }
 }
