@@ -1,6 +1,7 @@
 package com.yoooche.points.outbox;
 
 import com.yoooche.points.TestDataCleaner;
+import com.yoooche.points.TestTransactionFailure;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.repository.OutboxMessageRepository;
@@ -14,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 
@@ -44,10 +44,10 @@ class OutboxRelayTriggerIntegrationTest {
     private RocketMQTemplate rocketMQTemplate;
 
     @Autowired
-    private TransactionTemplate transactionTemplate;
+    private TestDataCleaner testDataCleaner;
 
     @Autowired
-    private TestDataCleaner testDataCleaner;
+    private TestTransactionFailure transactionFailure;
 
     @MockitoSpyBean
     private OutboxRelayTrigger trigger;
@@ -63,7 +63,7 @@ class OutboxRelayTriggerIntegrationTest {
     void commitPublishesWithoutWaitingForTheSweep() {
         when(rocketMQTemplate.syncSend(anyString(), anyCollection())).thenReturn(sendOk());
 
-        service.addPoints(new AddPointsRequest("user_1", 100L, "test"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "test"), java.util.UUID.randomUUID().toString());
 
         verify(trigger).wakeUp();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(outboxRepository.count()).isZero());
@@ -72,10 +72,10 @@ class OutboxRelayTriggerIntegrationTest {
 
     @Test
     void rollbackDoesNotWakeTheRelay() {
-        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
-            service.addPoints(new AddPointsRequest("user_1", 100L, "test"));
-            throw new IllegalStateException("rollback");
-        })).hasMessage("rollback");
+        assertThatThrownBy(() -> transactionFailure.runWithRollback(
+                () -> service.addPoints(new AddPointsRequest("user_1", 100L, "test"), java.util.UUID.randomUUID().toString()),
+                () -> verify(trigger, never()).wakeUp()))
+                .hasMessage("force rollback");
 
         verify(trigger, never()).wakeUp();
     }

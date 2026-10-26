@@ -12,14 +12,23 @@ import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import com.yoooche.points.repository.UserPointsRepository;
 import com.yoooche.points.service.UserPointsService;
+import com.yoooche.points.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.SQLException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 
 @Service
@@ -32,14 +41,43 @@ public class UserPointsServiceImpl implements UserPointsService {
     private final UserPointsRepository pointsRepository;
     private final UserPointsCache userPointsCache;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     @Override
-    public PointRecordResponse addPoints(AddPointsRequest request) {
+    public PointRecordResponse addPoints(AddPointsRequest request, String key) {
+        if (key == null || key.isBlank()) {
+            throw new BaseException(StatusCode.INVALID_PARAMETER, "Idempotency-Key is required");
+        }
+        try {
+            String hash = hash(JsonUtils.toJson(request));
+            var existing = recordRepository.findByIdempotencyKey(key);
+            if (existing.isPresent()) {
+                return replay(existing.get(), hash);
+            }
+            try {
+                return transactionTemplate.execute(status -> createPoints(request, key, hash));
+            } catch (DataIntegrityViolationException ex) {
+                // A concurrent first request may win the unique key. Its competitor's transaction has rolled back
+                // before this catch, so load the winner in a fresh transaction, never a rollback-only one.
+                var winner = recordRepository.findByIdempotencyKey(key);
+                if (winner.isEmpty()) {
+                    throw ex;
+                }
+                return replay(winner.get(), hash);
+            }
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Cannot encode idempotent points request or response", ex);
+        }
+    }
+
+    private PointRecordResponse createPoints(AddPointsRequest request, String idempotencyKey, String requestHash) {
         var record = new UserPointsRecord();
         record.setUserId(request.userId());
         record.setAmount(request.amount());
         record.setReason(request.reason());
+        record.setIdempotencyKey(idempotencyKey);
+        record.setRequestHash(requestHash);
         var saved = recordRepository.save(record);
 
         try {
@@ -53,7 +91,15 @@ public class UserPointsServiceImpl implements UserPointsService {
         }
         long total = pointsRepository.findTotalByUserId(request.userId());
         eventPublisher.publishEvent(new PointsAddedEvent(request.userId(), request.amount(), total));
-        return PointRecordResponse.from(saved);
+        var response = PointRecordResponse.from(saved);
+        try {
+            saved.setOriginalResponse(JsonUtils.toJson(response));
+            // addToTotal clears the persistence context; merge the detached record back before commit.
+            recordRepository.save(saved);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Cannot serialize original points response", ex);
+        }
+        return response;
     }
 
     @Override
@@ -85,6 +131,23 @@ public class UserPointsServiceImpl implements UserPointsService {
             throw new BaseException(StatusCode.USER_NOT_FOUND, "User not found: " + userId);
         }
         eventPublisher.publishEvent(new PointsDeletedEvent(userId));
+    }
+
+    private static PointRecordResponse replay(UserPointsRecord record, String hash) throws JsonProcessingException {
+        if (!hash.equals(record.getRequestHash())) {
+            throw new BaseException(StatusCode.IDEMPOTENCY_CONFLICT,
+                    "Idempotency-Key was already used with a different request");
+        }
+        return JsonUtils.fromJson(record.getOriginalResponse(), PointRecordResponse.class);
+    }
+
+    private static String hash(String json) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(json.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
     }
 
     private static boolean isTotalOverflow(DataAccessException ex) {

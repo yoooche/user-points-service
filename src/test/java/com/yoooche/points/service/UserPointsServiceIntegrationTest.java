@@ -53,7 +53,7 @@ class UserPointsServiceIntegrationTest {
             var futures = IntStream.range(0, requests)
                     .mapToObj(i -> pool.submit(() -> {
                         start.await();
-                        return service.addPoints(new AddPointsRequest("hot_user", 10L, "concurrent"));
+                        return service.addPoints(new AddPointsRequest("hot_user", 10L, "concurrent"), java.util.UUID.randomUUID().toString());
                     }))
                     .toList();
             start.countDown();
@@ -68,8 +68,8 @@ class UserPointsServiceIntegrationTest {
 
     @Test
     void deleteRemovesRecordsAndTotal() {
-        service.addPoints(new AddPointsRequest("user_1", 10L, "a"));
-        service.addPoints(new AddPointsRequest("user_1", 20L, "b"));
+        service.addPoints(new AddPointsRequest("user_1", 10L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_1", 20L, "b"), java.util.UUID.randomUUID().toString());
 
         service.deleteUserPoints("user_1");
 
@@ -79,7 +79,7 @@ class UserPointsServiceIntegrationTest {
 
     @Test
     void createdAtIsTheSameInPostAndPutResponses() {
-        PointRecordResponse created = service.addPoints(new AddPointsRequest("user_1", 10L, "a"));
+        PointRecordResponse created = service.addPoints(new AddPointsRequest("user_1", 10L, "a"), java.util.UUID.randomUUID().toString());
 
         PointRecordResponse updated = service.updateReason(created.id(), "b");
 
@@ -90,9 +90,9 @@ class UserPointsServiceIntegrationTest {
     @Test
     void totalOverflowIsRejectedAndRolledBack() {
         // The service itself has no per-request cap (that is enforced at the API), so it can seed the maximum.
-        service.addPoints(new AddPointsRequest("rich_user", Long.MAX_VALUE, "seed"));
+        service.addPoints(new AddPointsRequest("rich_user", Long.MAX_VALUE, "seed"), java.util.UUID.randomUUID().toString());
 
-        assertThatThrownBy(() -> service.addPoints(new AddPointsRequest("rich_user", 1L, "overflow")))
+        assertThatThrownBy(() -> service.addPoints(new AddPointsRequest("rich_user", 1L, "overflow"), java.util.UUID.randomUUID().toString()))
                 .isInstanceOf(BaseException.class)
                 .extracting("statusCode").isEqualTo(StatusCode.TOTAL_LIMIT_EXCEEDED);
         assertThat(recordRepository.count()).isEqualTo(1);

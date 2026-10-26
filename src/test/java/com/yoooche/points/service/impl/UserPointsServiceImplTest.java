@@ -3,11 +3,15 @@ package com.yoooche.points.service.impl;
 import com.yoooche.points.cache.UserPointsCache;
 import com.yoooche.points.constant.StatusCode;
 import com.yoooche.points.dto.PointRecordResponse;
+import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.model.UserPointsRecord;
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import com.yoooche.points.repository.UserPointsRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -18,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class UserPointsServiceImplTest {
@@ -33,6 +38,16 @@ class UserPointsServiceImplTest {
 
     @InjectMocks
     private UserPointsServiceImpl service;
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " "})
+    void keyedAddRequiresAKeyBeforeAccessingTheDatabase(String key) {
+        assertThatThrownBy(() -> service.addPoints(new AddPointsRequest("user_1", 100L, "bonus"), key))
+                .isInstanceOf(BaseException.class)
+                .extracting("statusCode").isEqualTo(StatusCode.INVALID_PARAMETER);
+        verifyNoInteractions(recordRepository, pointsRepository, userPointsCache);
+    }
 
     @Test
     void getTotalUserPointsThrowsWhenUserHasNoPoints() {

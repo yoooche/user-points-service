@@ -4,6 +4,7 @@
 set -euo pipefail
 
 BASE="${1:-http://localhost:8080/user-points-service}"
+RUN_ID="$(date +%s)-$$"
 REASONS=(signup_bonus daily_login referral purchase event_reward)
 
 add() {
@@ -11,6 +12,7 @@ add() {
   local status
   status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/points" \
     -H 'Content-Type: application/json' -H "X-Request-Id: seed-$user-$amount" \
+    -H "Idempotency-Key: seed-$RUN_ID-$user-$amount" \
     -d "{\"userId\":\"$user\",\"amount\":$amount,\"reason\":\"$reason\"}")
   if [ "$status" != "201" ]; then
     echo "POST for $user returned $status; is the service running at $BASE?" >&2

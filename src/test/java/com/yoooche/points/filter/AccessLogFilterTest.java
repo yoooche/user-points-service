@@ -1,5 +1,7 @@
 package com.yoooche.points.filter;
 
+import com.yoooche.points.constant.Headers;
+
 import com.yoooche.points.controller.UserPointsController;
 import com.yoooche.points.service.UserPointsService;
 import org.junit.jupiter.api.Test;
@@ -38,7 +40,7 @@ class AccessLogFilterTest {
 
     @Test
     void neverLogsRequestBody(CapturedOutput output) throws Exception {
-        mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"userId":"secret_user","amount":-1,"reason":"secret_reason"}"""));
 

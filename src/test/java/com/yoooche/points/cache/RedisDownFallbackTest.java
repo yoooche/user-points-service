@@ -1,5 +1,7 @@
 package com.yoooche.points.cache;
 
+import com.yoooche.points.constant.Headers;
+
 import com.yoooche.points.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,7 +38,7 @@ class RedisDownFallbackTest {
     void apiKeepsWorkingFromMySqlWhenRedisIsDown() throws Exception {
         redis.stop();
 
-        mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":"user_1","amount":100,"reason":"a"}"""))
                 .andExpect(status().isCreated());

@@ -30,14 +30,15 @@ You may use starter dependencies such as:
 
 ## ✅ Implementation
 
-Run it, seed data and try the endpoints: [HELP.md](HELP.md). Design choices and measurements: [docs/DESIGN.md](docs/DESIGN.md).
+Run it, seed data and try the endpoints: [HELP.md](HELP.md). Design trade-offs: [docs/TRADE_OFF.md](docs/TRADE_OFF.md).
 
 - All five endpoints; Swagger UI at `/user-points-service/swagger-ui/index.html`.
 - Totals are cached in Redis; the leaderboard is a Redis sorted set, and equal totals rank by `userId` ascending.
 - Every add publishes an `ADDED` message to `user-points-topic` through a transactional outbox, so a committed add
   always gets its event. Delivery is at least once and unordered: deduplicate by `eventId`.
+- Required `Idempotency-Key` prevents duplicate adds on HTTP retries; a changed payload with the same key returns 409.
 - Errors return `{system, requestId, statusCode, message, errors?}` with a matching HTTP status.
-- 87 unit and Testcontainers integration tests, 95% line coverage, run on GitHub Actions.
+- 123 unit and Testcontainers integration tests, 93% line coverage, run on GitHub Actions.
 
 Message, tag `ADDED`, keys `userId` and the request id:
 
@@ -59,6 +60,8 @@ Message, tag `ADDED`, keys `userId` and the request id:
 ### 1️⃣ Add User Points
 
 **Endpoint:** `POST /points`
+
+**Required header:** `Idempotency-Key: <unique-operation-id>` — use a new key per add and reuse it on retries.
 
 ```json
 {

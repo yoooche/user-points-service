@@ -1,7 +1,10 @@
 package com.yoooche.points.event;
 
+import com.yoooche.points.constant.Headers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.yoooche.points.TestDataCleaner;
+import com.yoooche.points.TestTransactionFailure;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.model.OutboxMessage;
@@ -25,7 +28,6 @@ import org.springframework.http.MediaType;
 import org.springframework.messaging.Message;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Collection;
 import java.util.List;
@@ -65,10 +67,10 @@ class PointsEventOutboxIntegrationTest {
     private RocketMQTemplate rocketMQTemplate;
 
     @Autowired
-    private TransactionTemplate transactionTemplate;
+    private TestDataCleaner testDataCleaner;
 
     @Autowired
-    private TestDataCleaner testDataCleaner;
+    private TestTransactionFailure transactionFailure;
 
     @BeforeEach
     void resetData() {
@@ -104,7 +106,7 @@ class PointsEventOutboxIntegrationTest {
 
     @Test
     void failedChangeWritesNoEvent() throws Exception {
-        service.addPoints(new AddPointsRequest("rich_user", Long.MAX_VALUE, "seed"));
+        service.addPoints(new AddPointsRequest("rich_user", Long.MAX_VALUE, "seed"), java.util.UUID.randomUUID().toString());
 
         addPoints("rich_user", 1, "req-1").andExpect(status().isUnprocessableEntity());
         mockMvc.perform(delete("/points/nobody")).andExpect(status().isNotFound());
@@ -114,11 +116,10 @@ class PointsEventOutboxIntegrationTest {
 
     @Test
     void eventIsRolledBackWithTheChangeThatWroteIt() {
-        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
-            service.addPoints(new AddPointsRequest("user_1", 100L, "test"));
-            assertThat(outboxRepository.count()).isEqualTo(1);
-            throw new IllegalStateException("rollback");
-        })).hasMessage("rollback");
+        assertThatThrownBy(() -> transactionFailure.runWithRollback(
+                () -> service.addPoints(new AddPointsRequest("user_1", 100L, "test"), java.util.UUID.randomUUID().toString()),
+                () -> assertThat(outboxRepository.count()).isEqualTo(1)))
+                .hasMessage("force rollback");
 
         assertThat(outboxRepository.count()).isZero();
         assertThat(pointsRepository.count()).isZero();
@@ -140,7 +141,7 @@ class PointsEventOutboxIntegrationTest {
     }
 
     private ResultActions addPoints(String userId, long amount, String requestId) throws Exception {
-        return mockMvc.perform(post("/points")
+        return mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString())
                 .header("X-Request-Id", requestId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""

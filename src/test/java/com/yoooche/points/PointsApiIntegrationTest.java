@@ -1,5 +1,7 @@
 package com.yoooche.points;
 
+import com.yoooche.points.constant.Headers;
+
 import com.yoooche.points.repository.UserPointsRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,11 +100,11 @@ class PointsApiIntegrationTest {
     }
 
     @Test
-    void repeatedPostWithTheSameRequestIdStillAddsTwice() throws Exception {
+    void differentKeysAddTwiceEvenWithTheSameRequestId() throws Exception {
         String body = """
                 {"userId":"retry_user","amount":100,"reason":"signup_bonus"}""";
         for (int i = 0; i < 2; i++) {
-            mockMvc.perform(post("/points").header("X-Request-Id", "same-request")
+            mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).header("X-Request-Id", "same-request")
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isCreated());
         }
@@ -145,7 +147,7 @@ class PointsApiIntegrationTest {
 
     @Test
     void clientErrorsDoNotExposeInternals() throws Exception {
-        expectNoInternals(mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON)));
+        expectNoInternals(mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)));
         expectNoInternals(addPoints("""
                 {"userId":"u1","amount":"abc","reason":"a"}"""));
         expectNoInternals(mockMvc.perform(put("/points/abc").contentType(MediaType.APPLICATION_JSON)
@@ -166,7 +168,7 @@ class PointsApiIntegrationTest {
     }
 
     private ResultActions addPoints(String json) throws Exception {
-        return mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON).content(json));
+        return mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     private static void expectNoInternals(ResultActions result) throws Exception {

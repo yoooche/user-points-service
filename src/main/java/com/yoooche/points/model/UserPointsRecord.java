@@ -30,4 +30,13 @@ public class UserPointsRecord extends BaseEntity {
 
     @Column(length = 255)
     private String reason;
+
+    @Column(name = "idempotency_key", length = 128, unique = true, updatable = false)
+    private String idempotencyKey;
+
+    @Column(name = "request_hash", columnDefinition = "char(64)", updatable = false)
+    private String requestHash;
+
+    @Column(name = "original_response", columnDefinition = "json")
+    private String originalResponse;
 }

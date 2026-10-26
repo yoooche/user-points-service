@@ -1,6 +1,7 @@
 package com.yoooche.points.controller;
 
 import com.yoooche.points.constant.Validation;
+import com.yoooche.points.constant.Headers;
 import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.dto.UpdateReasonRequest;
@@ -31,15 +32,19 @@ public class UserPointsController {
     private final UserPointsService userPointsService;
 
     @Operation(summary = "Add points to a user",
-            description = "Stores a point record, adds the amount to the user's total "
-                    + "and publishes an `ADDED` event to `user-points-topic`.")
+            description = "Stores a point record, adds the amount to the user's total ")
     @ApiResponse(responseCode = "201", description = "Record created")
-    @ApiResponse(responseCode = "400", description = "Invalid request body; `errors` lists each invalid field",
+    @ApiResponse(responseCode = "400", description = "Missing/invalid Idempotency-Key or invalid request body",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "409", description = "Idempotency-Key was used with a different request")
+    @ApiResponse(responseCode = "503", description = "Database busy; retry with the same key")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public PointRecordResponse addPoints(@Valid @RequestBody AddPointsRequest request) {
-        return userPointsService.addPoints(request);
+    public PointRecordResponse addPoints(@Valid @RequestBody AddPointsRequest request,
+            @Parameter(description = "Keys are shared across POST /points and retained until the point record is deleted.")
+            @RequestHeader(Headers.IDEMPOTENCY_KEY)
+            @Pattern(regexp = "[A-Za-z0-9_-]{1,128}", message = "must contain 1–128 letters, digits, '_' or '-'") String idempotencyKey) {
+        return userPointsService.addPoints(request, idempotencyKey);
     }
 
     @Operation(

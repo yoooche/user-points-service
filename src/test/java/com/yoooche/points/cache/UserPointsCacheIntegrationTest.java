@@ -1,6 +1,7 @@
 package com.yoooche.points.cache;
 
 import com.yoooche.points.TestDataCleaner;
+import com.yoooche.points.TestTransactionFailure;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.constant.CacheNames;
 import com.yoooche.points.constant.StatusCode;
@@ -18,7 +19,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,10 +41,10 @@ class UserPointsCacheIntegrationTest {
     private CacheManager cacheManager;
 
     @Autowired
-    private TransactionTemplate transactionTemplate;
+    private TestDataCleaner testDataCleaner;
 
     @Autowired
-    private TestDataCleaner testDataCleaner;
+    private TestTransactionFailure transactionFailure;
 
     @BeforeEach
     void resetData() {
@@ -53,7 +53,7 @@ class UserPointsCacheIntegrationTest {
 
     @Test
     void repeatedReadIsServedFromCache() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getTotalUserPoints("user_1");
 
         pointsRepository.deleteAll();
@@ -70,10 +70,10 @@ class UserPointsCacheIntegrationTest {
 
     @Test
     void addingPointsEvictsCachedTotal() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getTotalUserPoints("user_1");
 
-        service.addPoints(new AddPointsRequest("user_1", 50L, "b"));
+        service.addPoints(new AddPointsRequest("user_1", 50L, "b"), java.util.UUID.randomUUID().toString());
 
         assertThat(totalCache().get("user_1")).isNull();
         assertThat(service.getTotalUserPoints("user_1").total()).isEqualTo(150L);
@@ -81,7 +81,7 @@ class UserPointsCacheIntegrationTest {
 
     @Test
     void deletingUserEvictsCachedTotal() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getTotalUserPoints("user_1");
 
         service.deleteUserPoints("user_1");
@@ -93,14 +93,13 @@ class UserPointsCacheIntegrationTest {
 
     @Test
     void evictionWaitsForCommitAndIsSkippedOnRollback() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getTotalUserPoints("user_1");
 
-        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
-            service.addPoints(new AddPointsRequest("user_1", 50L, "b"));
-            assertThat(totalCache().get("user_1")).isNotNull();
-            throw new IllegalStateException("force rollback");
-        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> transactionFailure.runWithRollback(
+                () -> service.addPoints(new AddPointsRequest("user_1", 50L, "b"), java.util.UUID.randomUUID().toString()),
+                () -> assertThat(totalCache().get("user_1")).isNotNull()))
+                .hasMessage("force rollback");
 
         assertThat(totalCache().get("user_1", UserPointsResponse.class).total()).isEqualTo(100L);
         assertThat(pointsRepository.findById("user_1").orElseThrow().getTotal()).isEqualTo(100L);

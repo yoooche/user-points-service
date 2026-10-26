@@ -1,5 +1,7 @@
 package com.yoooche.points.controller;
 
+import com.yoooche.points.constant.Headers;
+
 import com.yoooche.points.dto.PointRecordResponse;
 import com.yoooche.points.exception.BaseException;
 import com.yoooche.points.constant.StatusCode;
@@ -35,10 +37,10 @@ class UserPointsControllerTest {
 
     @Test
     void addPointsReturns201() throws Exception {
-        when(service.addPoints(any())).thenReturn(
+        when(service.addPoints(any(), any(String.class))).thenReturn(
                 new PointRecordResponse(1L, "user_123", 100, "signup_bonus", Instant.now()));
 
-        mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":"user_123","amount":100,"reason":"signup_bonus"}"""))
                 .andExpect(status().isCreated())
@@ -47,7 +49,7 @@ class UserPointsControllerTest {
 
     @Test
     void addPointsRejectsInvalidBodyWithFieldErrors() throws Exception {
-        mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":"","amount":-5}"""))
                 .andExpect(status().isBadRequest())
@@ -59,7 +61,7 @@ class UserPointsControllerTest {
 
     @Test
     void malformedJsonReturns400() throws Exception {
-        mockMvc.perform(post("/points").contentType(MediaType.APPLICATION_JSON).content("{not json"))
+        mockMvc.perform(post("/points").header(Headers.IDEMPOTENCY_KEY, java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("{not json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.statusCode").value("invalid_parameter"));
     }

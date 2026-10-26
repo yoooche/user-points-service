@@ -1,6 +1,7 @@
 package com.yoooche.points.cache;
 
 import com.yoooche.points.TestDataCleaner;
+import com.yoooche.points.TestTransactionFailure;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.constant.CacheNames;
 import com.yoooche.points.config.RedisCacheProperties;
@@ -59,6 +60,9 @@ class LeaderboardIntegrationTest {
     @Autowired
     private TestDataCleaner testDataCleaner;
 
+    @Autowired
+    private TestTransactionFailure transactionFailure;
+
     @Value("${spring.application.name}:" + CacheNames.USER_POINTS_LEADERBOARD)
     private String zsetKey;
 
@@ -69,9 +73,9 @@ class LeaderboardIntegrationTest {
 
     @Test
     void ranksByTotalDescendingThenUserIdAscending() {
-        service.addPoints(new AddPointsRequest("user_b", 100L, "a"));
-        service.addPoints(new AddPointsRequest("user_a", 100L, "a"));
-        service.addPoints(new AddPointsRequest("user_c", 300L, "a"));
+        service.addPoints(new AddPointsRequest("user_b", 100L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_a", 100L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_c", 300L, "a"), java.util.UUID.randomUUID().toString());
 
         assertThat(top())
                 .extracting(UserPointsResponse::userId, UserPointsResponse::total)
@@ -80,10 +84,10 @@ class LeaderboardIntegrationTest {
 
     @Test
     void addingPointsInvalidatesBothLeaderboardCaches() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(100L);
 
-        service.addPoints(new AddPointsRequest("user_1", 50L, "b"));
+        service.addPoints(new AddPointsRequest("user_1", 50L, "b"), java.util.UUID.randomUUID().toString());
 
         assertThat(redisTemplate.hasKey(zsetKey)).isFalse();
         assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(150L);
@@ -91,7 +95,7 @@ class LeaderboardIntegrationTest {
 
     @Test
     void redisSnapshotUsesTheTtlConfiguredForItsCacheName() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getLeaderboard();
 
         long configuredTtl = redisCacheProperties.getTtl(CacheNames.USER_POINTS_LEADERBOARD).toMillis();
@@ -100,7 +104,7 @@ class LeaderboardIntegrationTest {
 
     @Test
     void lateEventCannotResurrectADeletedUser() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getLeaderboard();
         service.deleteUserPoints("user_1");
 
@@ -112,7 +116,7 @@ class LeaderboardIntegrationTest {
     @Test
     void deletingFromTopTenRefillsFromOutsideTheSnapshot() {
         IntStream.rangeClosed(1, 11).forEach(i ->
-                service.addPoints(new AddPointsRequest("user_" + i, (long) i, "seed")));
+                service.addPoints(new AddPointsRequest("user_" + i, (long) i, "seed"), java.util.UUID.randomUUID().toString()));
         assertThat(service.getLeaderboard()).hasSize(10);
         assertThat(redisTemplate.opsForZSet().zCard(zsetKey)).isEqualTo(10L);
 
@@ -125,8 +129,8 @@ class LeaderboardIntegrationTest {
 
     @Test
     void deletedUserLeavesTheLeaderboard() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
-        service.addPoints(new AddPointsRequest("user_2", 50L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_2", 50L, "a"), java.util.UUID.randomUUID().toString());
 
         service.deleteUserPoints("user_1");
 
@@ -135,17 +139,19 @@ class LeaderboardIntegrationTest {
 
     @Test
     void rolledBackAddDoesNotReachTheLeaderboard() {
-        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
-            service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
-            throw new IllegalStateException("force rollback");
-        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> transactionFailure.runWithRollback(
+                () -> service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString()),
+                () -> assertThat(redisTemplate.hasKey(zsetKey)).isFalse()))
+                .hasMessage("force rollback");
 
-        assertThat(redisTemplate.opsForZSet().score(zsetKey, "user_1")).isNull();
+        assertThat(pointsRepository.count()).isZero();
+        assertThat(service.getLeaderboard()).isEmpty();
+        assertThat(redisTemplate.hasKey(zsetKey)).isFalse();
     }
 
     @Test
     void emptySortedSetIsRebuiltFromMySql() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         redisTemplate.delete(zsetKey);
 
         assertThat(top()).extracting(UserPointsResponse::userId).containsExactly("user_1");
@@ -154,12 +160,12 @@ class LeaderboardIntegrationTest {
 
     @Test
     void addingAfterRedisIsClearedDoesNotHideExistingUsers() {
-        service.addPoints(new AddPointsRequest("user_a", 1000L, "a"));
-        service.addPoints(new AddPointsRequest("user_b", 500L, "b"));
+        service.addPoints(new AddPointsRequest("user_a", 1000L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_b", 500L, "b"), java.util.UUID.randomUUID().toString());
         top();
         redisTemplate.delete(zsetKey);
 
-        service.addPoints(new AddPointsRequest("user_c", 10L, "c"));
+        service.addPoints(new AddPointsRequest("user_c", 10L, "c"), java.util.UUID.randomUUID().toString());
 
         assertThat(top()).extracting(UserPointsResponse::userId)
                 .containsExactly("user_a", "user_b", "user_c");
@@ -167,8 +173,8 @@ class LeaderboardIntegrationTest {
 
     @Test
     void deletingUserInvalidatesAnAlreadyCachedLeaderboard() {
-        service.addPoints(new AddPointsRequest("user_a", 100L, "a"));
-        service.addPoints(new AddPointsRequest("user_b", 50L, "b"));
+        service.addPoints(new AddPointsRequest("user_a", 100L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_b", 50L, "b"), java.util.UUID.randomUUID().toString());
         service.getLeaderboard();
 
         service.deleteUserPoints("user_a");
@@ -187,7 +193,7 @@ class LeaderboardIntegrationTest {
 
     @Test
     void expiredSnapshotForcesARefreshOfNonemptyRedisData() {
-        service.addPoints(new AddPointsRequest("user_a", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_a", 100L, "a"), java.util.UUID.randomUUID().toString());
         service.getLeaderboard();
         // Simulate a missed invalidation, then expiry of the Redis snapshot.
         transactionTemplate.executeWithoutResult(status ->
@@ -199,8 +205,8 @@ class LeaderboardIntegrationTest {
 
     @Test
     void redisSnapshotPreservesLargeIntegerTotalsAndTheirOrdering() {
-        service.addPoints(new AddPointsRequest("user_a", 9_007_199_254_740_992L, "a"));
-        service.addPoints(new AddPointsRequest("user_z", 9_007_199_254_740_993L, "z"));
+        service.addPoints(new AddPointsRequest("user_a", 9_007_199_254_740_992L, "a"), java.util.UUID.randomUUID().toString());
+        service.addPoints(new AddPointsRequest("user_z", 9_007_199_254_740_993L, "z"), java.util.UUID.randomUUID().toString());
         var snapshot = service.getLeaderboard();
 
         assertThat(top()).isEqualTo(snapshot).extracting(UserPointsResponse::userId, UserPointsResponse::total)
@@ -209,7 +215,7 @@ class LeaderboardIntegrationTest {
 
     @Test
     void rolledBackDeleteKeepsTheCachedLeaderboard() {
-        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"), java.util.UUID.randomUUID().toString());
         var snapshot = service.getLeaderboard();
 
         assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {

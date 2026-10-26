@@ -16,6 +16,11 @@ import static org.mockito.Mockito.mock;
 public class TestcontainersConfiguration {
 
     @Bean
+    TestTransactionFailure testTransactionFailure() {
+        return new TestTransactionFailure();
+    }
+
+    @Bean
     @ServiceConnection
     MySQLContainer<?> mysqlContainer() {
         return new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
