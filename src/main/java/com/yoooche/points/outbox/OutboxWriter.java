@@ -1,9 +1,9 @@
 package com.yoooche.points.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yoooche.points.model.OutboxMessage;
 import com.yoooche.points.repository.OutboxMessageRepository;
+import com.yoooche.points.utils.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -14,14 +14,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
 public class OutboxWriter {
 
     private final OutboxMessageRepository outboxRepository;
-    private final ObjectMapper objectMapper;
     private final ObjectProvider<OutboxRelayTrigger> relayTrigger;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -49,7 +47,7 @@ public class OutboxWriter {
 
     private String toJson(Object message, String eventId) {
         try {
-            return objectMapper.writeValueAsString(message);
+            return JsonUtils.toJson(message);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Cannot serialize message " + eventId, ex);
         }

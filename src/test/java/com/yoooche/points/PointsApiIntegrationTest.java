@@ -98,6 +98,21 @@ class PointsApiIntegrationTest {
     }
 
     @Test
+    void repeatedPostWithTheSameRequestIdStillAddsTwice() throws Exception {
+        String body = """
+                {"userId":"retry_user","amount":100,"reason":"signup_bonus"}""";
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(post("/points").header("X-Request-Id", "same-request")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/points/retry_user"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(200));
+        assertThat(recordRepository.count()).isEqualTo(2);
+    }
+
+    @Test
     void decimalAmountIsRejectedInsteadOfTruncated() throws Exception {
         addPoints("""
                 {"userId":"u1","amount":1.9,"reason":"a"}""").andExpect(status().isBadRequest());

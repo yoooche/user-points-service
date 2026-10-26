@@ -15,6 +15,14 @@ public class RedisCacheProperties {
 
     private List<CacheSpec> caches = new ArrayList<>();
 
+    public Duration getTtl(String cacheName) {
+        return caches.stream()
+                .filter(cache -> cacheName.equals(cache.getCacheName()))
+                .map(CacheSpec::getTtl)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No Redis TTL configured for cache: " + cacheName));
+    }
+
     @Getter
     @Setter
     public static class CacheSpec {

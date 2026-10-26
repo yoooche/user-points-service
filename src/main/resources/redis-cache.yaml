@@ -12,3 +12,5 @@ redis:
   caches:
     - cache-name: user-points-total
       ttl: 10m
+    - cache-name: user-points-leaderboard
+      ttl: 5s

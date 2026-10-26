@@ -58,4 +58,14 @@ class OutboxWriterIntegrationTest {
         assertThatThrownBy(() -> outboxWriter.append("some-topic", "TAG", "key_1", "event-1", null, Map.of()))
                 .isInstanceOf(IllegalTransactionStateException.class);
     }
+
+    @Test
+    void serializationFailureRollsBackTheWholeTransaction() {
+        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+            outboxWriter.append("some-topic", "TAG", "key_1", "event-good", null, Map.of("a", 1));
+            outboxWriter.append("some-topic", "TAG", "key_2", "event-bad", null, new Object());
+        })).isInstanceOf(IllegalStateException.class).hasMessage("Cannot serialize message event-bad");
+
+        assertThat(outboxRepository.count()).isZero();
+    }
 }

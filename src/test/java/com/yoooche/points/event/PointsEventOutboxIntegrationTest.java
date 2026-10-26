@@ -1,7 +1,6 @@
 package com.yoooche.points.event;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yoooche.points.TestDataCleaner;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.dto.AddPointsRequest;
@@ -10,6 +9,7 @@ import com.yoooche.points.outbox.OutboxRelay;
 import com.yoooche.points.repository.OutboxMessageRepository;
 import com.yoooche.points.repository.UserPointsRepository;
 import com.yoooche.points.service.UserPointsService;
+import com.yoooche.points.utils.JsonUtils;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
@@ -68,9 +68,6 @@ class PointsEventOutboxIntegrationTest {
     private TransactionTemplate transactionTemplate;
 
     @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
     private TestDataCleaner testDataCleaner;
 
     @BeforeEach
@@ -83,7 +80,7 @@ class PointsEventOutboxIntegrationTest {
         addPoints("user_1", 100, "req-1").andExpect(status().isCreated());
 
         OutboxMessage outbox = outboxRows().getFirst();
-        JsonNode payload = objectMapper.readTree(outbox.getPayload());
+        JsonNode payload = JsonUtils.readTree(outbox.getPayload());
         assertThat(outbox.getTopic()).isEqualTo("user-points-topic");
         assertThat(outbox.getTag()).isEqualTo("ADDED");
         assertThat(outbox.getMessageKey()).isEqualTo("user_1");

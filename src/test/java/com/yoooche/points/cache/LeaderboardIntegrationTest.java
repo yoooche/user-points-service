@@ -3,10 +3,12 @@ package com.yoooche.points.cache;
 import com.yoooche.points.TestDataCleaner;
 import com.yoooche.points.TestcontainersConfiguration;
 import com.yoooche.points.constant.CacheNames;
+import com.yoooche.points.config.RedisCacheProperties;
 import com.yoooche.points.dto.AddPointsRequest;
 import com.yoooche.points.dto.UserPointsResponse;
 import com.yoooche.points.event.PointsAddedEvent;
 import com.yoooche.points.service.UserPointsService;
+import com.yoooche.points.repository.UserPointsRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,11 +16,14 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.interceptor.SimpleKey;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +36,12 @@ class LeaderboardIntegrationTest {
 
     @Autowired
     private UserPointsService service;
+
+    @Autowired
+    private UserPointsRepository pointsRepository;
+
+    @Autowired
+    private RedisCacheProperties redisCacheProperties;
 
     @Autowired
     private UserPointsCache userPointsCache;
@@ -68,28 +79,48 @@ class LeaderboardIntegrationTest {
     }
 
     @Test
-    void sortedSetHoldsTheLatestTotalAsNegativeScore() {
+    void addingPointsInvalidatesBothLeaderboardCaches() {
         service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(100L);
+
         service.addPoints(new AddPointsRequest("user_1", 50L, "b"));
 
-        assertThat(redisTemplate.opsForZSet().score(zsetKey, "user_1")).isEqualTo(-150.0);
+        assertThat(redisTemplate.hasKey(zsetKey)).isFalse();
+        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(150L);
     }
 
     @Test
-    void lateEventCannotLowerATotal() {
-        userPointsCache.updateLeaderboard(new PointsAddedEvent("user_1", 50L, 200L));
-        userPointsCache.updateLeaderboard(new PointsAddedEvent("user_1", 50L, 150L));
+    void redisSnapshotUsesTheTtlConfiguredForItsCacheName() {
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.getLeaderboard();
 
-        assertThat(redisTemplate.opsForZSet().score(zsetKey, "user_1")).isEqualTo(-200.0);
+        long configuredTtl = redisCacheProperties.getTtl(CacheNames.USER_POINTS_LEADERBOARD).toMillis();
+        assertThat(redisTemplate.getExpire(zsetKey, TimeUnit.MILLISECONDS)).isBetween(1L, configuredTtl);
     }
 
     @Test
-    void sortedSetIsTrimmedToCapacity() {
-        IntStream.rangeClosed(1, 1001).forEach(i ->
-                userPointsCache.updateLeaderboard(new PointsAddedEvent("user_" + i, i, i)));
+    void lateEventCannotResurrectADeletedUser() {
+        service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
+        service.getLeaderboard();
+        service.deleteUserPoints("user_1");
 
-        assertThat(redisTemplate.opsForZSet().zCard(zsetKey)).isEqualTo(1000L);
-        assertThat(redisTemplate.opsForZSet().score(zsetKey, "user_1")).isNull();
+        userPointsCache.invalidateLeaderboard(new PointsAddedEvent("user_1", 100L, 100L));
+
+        assertThat(service.getLeaderboard()).isEmpty();
+    }
+
+    @Test
+    void deletingFromTopTenRefillsFromOutsideTheSnapshot() {
+        IntStream.rangeClosed(1, 11).forEach(i ->
+                service.addPoints(new AddPointsRequest("user_" + i, (long) i, "seed")));
+        assertThat(service.getLeaderboard()).hasSize(10);
+        assertThat(redisTemplate.opsForZSet().zCard(zsetKey)).isEqualTo(10L);
+
+        service.deleteUserPoints("user_11");
+
+        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::userId)
+                .containsExactly("user_10", "user_9", "user_8", "user_7", "user_6",
+                        "user_5", "user_4", "user_3", "user_2", "user_1");
     }
 
     @Test
@@ -118,19 +149,77 @@ class LeaderboardIntegrationTest {
         redisTemplate.delete(zsetKey);
 
         assertThat(top()).extracting(UserPointsResponse::userId).containsExactly("user_1");
-        assertThat(redisTemplate.opsForZSet().score(zsetKey, "user_1")).isEqualTo(-100.0);
+        assertThat(redisTemplate.opsForZSet().zCard(zsetKey)).isEqualTo(1L);
     }
 
     @Test
-    void leaderboardIsServedFromLocalCacheUntilItExpires() {
+    void addingAfterRedisIsClearedDoesNotHideExistingUsers() {
+        service.addPoints(new AddPointsRequest("user_a", 1000L, "a"));
+        service.addPoints(new AddPointsRequest("user_b", 500L, "b"));
+        top();
+        redisTemplate.delete(zsetKey);
+
+        service.addPoints(new AddPointsRequest("user_c", 10L, "c"));
+
+        assertThat(top()).extracting(UserPointsResponse::userId)
+                .containsExactly("user_a", "user_b", "user_c");
+    }
+
+    @Test
+    void deletingUserInvalidatesAnAlreadyCachedLeaderboard() {
+        service.addPoints(new AddPointsRequest("user_a", 100L, "a"));
+        service.addPoints(new AddPointsRequest("user_b", 50L, "b"));
+        service.getLeaderboard();
+
+        service.deleteUserPoints("user_a");
+
+        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::userId)
+                .containsExactly("user_b");
+    }
+
+    @Test
+    void emptyLeaderboardIsCachedWithoutCreatingASortedSet() {
+        assertThat(service.getLeaderboard()).isEmpty();
+        assertThat(redisTemplate.hasKey(zsetKey)).isFalse();
+        assertThat(caffeineCacheManager.getCache(CacheNames.USER_POINTS_LEADERBOARD)
+                .get(SimpleKey.EMPTY, List.class)).isNotNull().isEmpty();
+    }
+
+    @Test
+    void expiredSnapshotForcesARefreshOfNonemptyRedisData() {
+        service.addPoints(new AddPointsRequest("user_a", 100L, "a"));
+        service.getLeaderboard();
+        // Simulate a missed invalidation, then expiry of the Redis snapshot.
+        transactionTemplate.executeWithoutResult(status ->
+                pointsRepository.addToTotal("user_b", 200L));
+        redisTemplate.expire(zsetKey, Duration.ZERO);
+
+        assertThat(top()).extracting(UserPointsResponse::userId).containsExactly("user_b", "user_a");
+    }
+
+    @Test
+    void redisSnapshotPreservesLargeIntegerTotalsAndTheirOrdering() {
+        service.addPoints(new AddPointsRequest("user_a", 9_007_199_254_740_992L, "a"));
+        service.addPoints(new AddPointsRequest("user_z", 9_007_199_254_740_993L, "z"));
+        var snapshot = service.getLeaderboard();
+
+        assertThat(top()).isEqualTo(snapshot).extracting(UserPointsResponse::userId, UserPointsResponse::total)
+                .containsExactly(tuple("user_z", 9_007_199_254_740_993L), tuple("user_a", 9_007_199_254_740_992L));
+    }
+
+    @Test
+    void rolledBackDeleteKeepsTheCachedLeaderboard() {
         service.addPoints(new AddPointsRequest("user_1", 100L, "a"));
-        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(100L);
+        var snapshot = service.getLeaderboard();
 
-        service.addPoints(new AddPointsRequest("user_1", 50L, "b"));
-        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(100L);
+        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+            service.deleteUserPoints("user_1");
+            throw new IllegalStateException("rollback");
+        })).isInstanceOf(IllegalStateException.class);
 
-        caffeineCacheManager.getCache(CacheNames.USER_POINTS_LEADERBOARD).clear();
-        assertThat(service.getLeaderboard()).extracting(UserPointsResponse::total).containsExactly(150L);
+        assertThat(service.getLeaderboard()).isEqualTo(snapshot);
+        // Clear only the local cache, then verify the public API can still read the Redis result.
+        assertThat(top()).isEqualTo(snapshot);
     }
 
     private List<UserPointsResponse> top() {

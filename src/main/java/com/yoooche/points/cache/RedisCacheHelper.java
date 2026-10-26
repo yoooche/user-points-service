@@ -1,68 +1,50 @@
 package com.yoooche.points.cache;
 
+import com.yoooche.points.config.RedisCacheProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.connection.RedisZSetCommands.ZAddArgs;
-import org.springframework.data.redis.connection.zset.Tuple;
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class RedisCacheHelper {
 
+    private static final DefaultRedisScript<Long> REPLACE_ZSET = new DefaultRedisScript<>("""
+            redis.call('DEL', KEYS[1])
+            for i = 2, #ARGV do
+                redis.call('ZADD', KEYS[1], i - 2, ARGV[i])
+            end
+            if #ARGV > 1 and tonumber(ARGV[1]) > 0 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+            return redis.call('ZCARD', KEYS[1])
+            """, Long.class);
+
     private final StringRedisTemplate redisTemplate;
+    private final RedisCacheProperties properties;
 
     @Value("${spring.application.name}")
     private String system;
 
-    public void zAddIfLower(String key, Map<String, Double> scores) {
-        if (scores.isEmpty()) {
-            return;
-        }
-        Set<Tuple> tuples = scores.entrySet().stream()
-                .map(entry -> Tuple.of(bytes(entry.getKey()), entry.getValue()))
-                .collect(Collectors.toSet());
-        byte[] rawKey = bytes(prefixed(key));
-        redisTemplate.execute((RedisCallback<Long>) connection ->
-                connection.zSetCommands().zAdd(rawKey, tuples, ZAddArgs.empty().lt()));
+    public List<String> zrange(String cacheName, long start, long end) {
+        return List.copyOf(redisTemplate.opsForZSet().range(prefixed(cacheName), start, end));
     }
 
-    public void zKeepFirst(String key, long count) {
-        redisTemplate.opsForZSet().removeRange(prefixed(key), count, -1);
+    public void replaceZSet(String cacheName, List<String> members) {
+        var args = new ArrayList<String>();
+        args.add(Long.toString(properties.getTtl(cacheName).toMillis()));
+        args.addAll(members);
+        redisTemplate.execute(REPLACE_ZSET, List.of(prefixed(cacheName)), args.toArray());
     }
 
-    public void zRemove(String key, String member) {
-        redisTemplate.opsForZSet().remove(prefixed(key), member);
+    public void delete(String cacheName) {
+        redisTemplate.delete(prefixed(cacheName));
     }
 
-    public Map<String, Double> zRangeWithScores(String key, long start, long end) {
-        Set<TypedTuple<String>> entries = redisTemplate.opsForZSet().rangeWithScores(prefixed(key), start, end);
-        var result = new LinkedHashMap<String, Double>();
-        if (entries != null) {
-            entries.forEach(entry -> result.put(entry.getValue(), entry.getScore()));
-        }
-        return result;
-    }
-
-    public long zSize(String key) {
-        Long size = redisTemplate.opsForZSet().zCard(prefixed(key));
-        return size == null ? 0 : size;
-    }
-
-    private String prefixed(String key) {
-        return system + ":" + key;
-    }
-
-    private static byte[] bytes(String value) {
-        return value.getBytes(StandardCharsets.UTF_8);
+    private String prefixed(String cacheName) {
+        return system + ":" + cacheName;
     }
 }

@@ -1,7 +1,7 @@
 package com.yoooche.points.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.yoooche.points.utils.JsonUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
@@ -28,12 +28,12 @@ public class RedisConfig implements CachingConfigurer {
 
     @Bean("redisCacheManager")
     @Primary
-    public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper,
+    public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory,
             RedisCacheProperties properties) {
         var defaults = RedisCacheConfiguration.defaultCacheConfig()
                 .prefixCacheNameWith(system + ":")
                 .disableCachingNullValues()
-                .serializeValuesWith(SerializationPair.fromSerializer(valueSerializer(objectMapper)));
+                .serializeValuesWith(SerializationPair.fromSerializer(valueSerializer()));
 
         var builder = RedisCacheManager
                 .builder(RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory, BatchStrategies.scan(1000)))
@@ -49,8 +49,8 @@ public class RedisConfig implements CachingConfigurer {
         return new LoggingCacheErrorHandler();
     }
 
-    private static RedisSerializer<Object> valueSerializer(ObjectMapper objectMapper) {
-        var mapper = objectMapper.copy();
+    private static RedisSerializer<Object> valueSerializer() {
+        var mapper = JsonUtils.copyMapper();
         mapper.setPolymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.yoooche.points.")
                 .allowIfSubType("java.lang.")
