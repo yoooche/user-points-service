@@ -1,4 +1,11 @@
 # Boot layers this file over the main application.yaml. Tests call the relay directly instead of racing it.
+spring:
+  datasource:
+    hikari:
+      # Cold CI runners can take longer to complete the first MySQL handshake.
+      connection-timeout: 30000
+      initialization-fail-timeout: 60000
+
 outbox:
   relay:
     enabled: false
