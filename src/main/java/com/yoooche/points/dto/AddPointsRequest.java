@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.validator.constraints.Range;
 
 public record AddPointsRequest(
-        @Schema(description = "1-64 characters of letters, digits, '_' or '-'. Case-sensitive.", example = "user_123")
+        @Schema(description = "1-64 characters of letters, digits, '_' or '-'. Case-sensitive; 'leaderboard' is reserved.", example = "user_123")
         @NotNull @Pattern(regexp = Validation.USER_ID_PATTERN, message = Validation.USER_ID_MESSAGE) String userId,
 
         @Schema(description = "1 to 1,000,000. Whole numbers only; deductions are not supported.",

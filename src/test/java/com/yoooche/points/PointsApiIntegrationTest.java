@@ -92,6 +92,33 @@ class PointsApiIntegrationTest {
     }
 
     @Test
+    void reservedUserIdIsRejectedWithoutCreatingPoints() throws Exception {
+        addPoints("""
+                {"userId":"leaderboard","amount":42,"reason":"bonus"}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value("invalid_parameter"))
+                .andExpect(jsonPath("$.errors.userId").exists());
+
+        assertThat(recordRepository.count()).isZero();
+        mockMvc.perform(get("/points/leaderboard"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void namesSimilarToReservedUserIdRemainQueryable() throws Exception {
+        for (String userId : new String[]{"Leaderboard", "leaderboard_1"}) {
+            addPoints("""
+                    {"userId":"%s","amount":42,"reason":"bonus"}""".formatted(userId))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(get("/points/{userId}", userId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.userId").value(userId))
+                    .andExpect(jsonPath("$.total").value(42));
+        }
+    }
+
+    @Test
     void amountAboveLimitIsRejected() throws Exception {
         addPoints("""
                 {"userId":"u1","amount":1000001,"reason":"a"}""")

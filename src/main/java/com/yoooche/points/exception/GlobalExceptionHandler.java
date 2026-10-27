@@ -54,7 +54,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             errors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
         log.warn("[{}] {}", StatusCode.INVALID_PARAMETER.getCode(), errors);
-        return respond(status, ErrorResponse.of(system, StatusCode.INVALID_PARAMETER, "Request validation failed", errors));
+        return respond(status, headers, ErrorResponse.of(system, StatusCode.INVALID_PARAMETER, "Request validation failed", errors));
     }
 
     @Override
@@ -73,7 +73,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                     .ifPresent(error -> errors.putIfAbsent(name, error.getDefaultMessage()));
         }
         log.warn("[{}] {}", StatusCode.INVALID_PARAMETER.getCode(), errors);
-        return respond(status, ErrorResponse.of(system, StatusCode.INVALID_PARAMETER, "Request validation failed", errors));
+        return respond(status, headers, ErrorResponse.of(system, StatusCode.INVALID_PARAMETER, "Request validation failed", errors));
     }
 
     /** Never returns {@code ex.getMessage()}: Spring's messages name internal classes and methods. */
@@ -86,7 +86,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         } else {
             log.warn("[{}] {}", statusCode.getCode(), ex.getMessage());
         }
-        return respond(status, ErrorResponse.of(system, statusCode, clientMessage(ex, status)));
+        return respond(status, headers, ErrorResponse.of(system, statusCode, clientMessage(ex, status)));
     }
 
     @ExceptionHandler(Exception.class)
@@ -120,8 +120,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         };
     }
 
-    @SuppressWarnings("unchecked")
     private <T> ResponseEntity<T> respond(HttpStatusCode status, ErrorResponse body) {
-        return (ResponseEntity<T>) ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(body);
+        return respond(status, HttpHeaders.EMPTY, body);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> ResponseEntity<T> respond(HttpStatusCode status, HttpHeaders headers, ErrorResponse body) {
+        return (ResponseEntity<T>) ResponseEntity.status(status).headers(headers)
+                .contentType(MediaType.APPLICATION_JSON).body(body);
     }
 }

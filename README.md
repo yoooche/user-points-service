@@ -38,7 +38,7 @@ Run it, seed data and try the endpoints: [HELP.md](HELP.md). Design trade-offs: 
   always gets its event. Delivery is at least once and unordered: deduplicate by `eventId`.
 - Required `Idempotency-Key` prevents duplicate adds on HTTP retries; a changed payload with the same key returns 409.
 - Errors return `{system, requestId, statusCode, message, errors?}` with a matching HTTP status.
-- 123 unit and Testcontainers integration tests, 93% line coverage, run on GitHub Actions.
+- 125 unit and Testcontainers integration tests, 93% line coverage, run on GitHub Actions.
 
 Message, tag `ADDED`, keys `userId` and the request id:
 
@@ -62,6 +62,8 @@ Message, tag `ADDED`, keys `userId` and the request id:
 **Endpoint:** `POST /points`
 
 **Required header:** `Idempotency-Key: <unique-operation-id>` — use a new key per add and reuse it on retries.
+
+The exact user ID `leaderboard` is reserved by `GET /points/leaderboard`; adding points to it returns 400.
 
 ```json
 {
