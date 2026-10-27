@@ -14,7 +14,13 @@ Docker runs MySQL, Redis and RocketMQ; the Java service runs locally on port **8
 The Maven wrapper is `./mvnw`, not the `./mvn` command in the original README.
 
 - Swagger: [http://localhost:8080/user-points-service/swagger-ui/index.html](http://localhost:8080/user-points-service/swagger-ui/index.html)
+- RocketMQ Console: [http://localhost:8088](http://localhost:8088). Under Message, select `user-points-topic`
+  and search by the `userId` key to inspect an added-points event.
 - Optional sample data: `scripts/seed.sh`
+
+The broker advertises `127.0.0.1:10911` for the locally running Java service. Console shares the broker's network
+namespace so that address also reaches the broker from Console. Its port 8080 is published as host port 8088
+by the broker service. Broker messages and topic metadata are stored in the `rocketmq_store` volume.
 
 `POST /points` requires `Idempotency-Key`: use a new key for each add and reuse it when retrying that operation.
 

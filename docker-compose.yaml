@@ -53,21 +53,36 @@ services:
       timeout: 5s
       retries: 10
 
+  rocketmq-store-init:
+    image: apache/rocketmq:5.1.4
+    platform: linux/amd64
+    user: "0"
+    volumes:
+      - rocketmq_store:/store
+    command: ["sh", "-c", "chown 3000:3000 /store"]
+
   rocketmq-broker:
     image: apache/rocketmq:5.1.4
     platform: linux/amd64
     container_name: rocketmq-broker
+    restart: unless-stopped
     depends_on:
-      - rocketmq-namesrv
+      rocketmq-namesrv:
+        condition: service_started
+      rocketmq-store-init:
+        condition: service_completed_successfully
     ports:
       - "10911:10911"
       - "10909:10909"
+      # Console shares the broker's network namespace.
+      - "8088:8080"
     environment:
       NAMESRV_ADDR: rocketmq-namesrv:9876
       # runbroker.sh sizes direct memory from the whole VM, which got the broker OOM-killed next to the other services.
       JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn256m -XX:MaxDirectMemorySize=256m"
     volumes:
       - ./broker.conf:/home/rocketmq/rocketmq-5.1.4/conf/broker.conf
+      - rocketmq_store:/home/rocketmq/store
     command: sh mqbroker -c /home/rocketmq/rocketmq-5.1.4/conf/broker.conf
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
@@ -81,14 +96,14 @@ services:
     platform: linux/amd64
     container_name: rocketmq-console
     restart: always
-    ports:
-      - "8088:8080"
+    network_mode: "service:rocketmq-broker"
     environment:
       # Without -Xmx the console sizes its heap from the whole VM and took about 2.5 GB.
       JAVA_OPTS: "-Xms128m -Xmx256m -Drocketmq.namesrv.addr=rocketmq-namesrv:9876 -Dcom.rocketmq.sendMessageWithVIPChannel=false"
     depends_on:
-      - rocketmq-namesrv
+      - rocketmq-broker
 
 volumes:
   mysql_data:
   redis_data:
+  rocketmq_store:
